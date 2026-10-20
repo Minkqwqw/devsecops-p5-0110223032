@@ -1,6 +1,6 @@
 """
 Modul Utilitas Keamanan & Kriptografi (src/security.py)
-Menyediakan fungsi hashing password, pembuatan token sesi, dan sanitasi input.
+Menyediakan fungsi hashing password, pembuatan token sesi, checksum SHA-256, dan sanitasi input.
 """
 
 import hashlib
@@ -12,7 +12,7 @@ from typing import Tuple
 
 def hash_password(password: str, salt: str = "") -> Tuple[str, str]:
     """
-    Melakukan hashing kata sandi menggunakan PBKDF2-HMAC-SHA256.
+    Melakukan hashing kata sandi menggunakan PBKDF2-HMAC-SHA256 (100.000 iterasi).
     Mengembalikan tuple (password_hash, salt).
     """
     if not password or len(password) < 8:
@@ -30,12 +30,12 @@ def hash_password(password: str, salt: str = "") -> Tuple[str, str]:
     return dk.hex(), salt
 
 
-def legacy_weak_hash(data: str) -> str:
+def compute_integrity_digest(data: str) -> str:
     """
-    [VULNERABILITY - COMMIT 1]: Penggunaan algoritma MD5 yang lemah (CWE-327).
-    Akan dideteksi oleh Bandit SAST (B324: hashlib) dan diremediasi pada Commit 2.
+    [REMEDIATED]: Menggantikan algoritma lemah MD5 (CWE-327) dengan SHA-256 yang aman
+    untuk verifikasi integritas data.
     """
-    return hashlib.md5(data.encode("utf-8")).hexdigest()
+    return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
 def verify_password(password: str, stored_hash: str, salt: str) -> bool:
@@ -56,11 +56,3 @@ def sanitize_text(text: str, max_length: int = 255) -> str:
     cleaned = text.strip()
     cleaned = re.sub(r"[<>\"';]", "", cleaned)
     return cleaned[:max_length]
-
-
-def evaluate_dynamic_expression(expr: str) -> str:
-    """
-    [VULNERABILITY - COMMIT 1]: Penggunaan eval() yang berbahaya (B307 / CWE-95).
-    Akan dideteksi oleh Bandit SAST dan diremediasi pada Commit 2.
-    """
-    return str(eval(expr))

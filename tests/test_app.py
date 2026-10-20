@@ -6,7 +6,12 @@ Menguji modul keamanan, autentikasi, manajemen tugas, dan kontrol akses.
 import pytest
 
 from src.app import SecureTaskApp
-from src.security import hash_password, sanitize_text, verify_password
+from src.security import (
+    compute_integrity_digest,
+    hash_password,
+    sanitize_text,
+    verify_password,
+)
 
 
 def test_password_hashing_and_verification() -> None:
@@ -16,6 +21,7 @@ def test_password_hashing_and_verification() -> None:
     assert len(salt) == 32
     assert verify_password("SecurePass!2026", pwd_hash, salt) is True
     assert verify_password("WrongPassword123", pwd_hash, salt) is False
+    assert len(compute_integrity_digest("payload-integritas")) == 64
 
 
 def test_short_password_rejected() -> None:
