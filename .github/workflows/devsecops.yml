@@ -1,0 +1,136 @@
+name: DevSecOps CI/CD & SAST Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build & Unit Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile Python Source Code
+        run: |
+          python -m compileall src/ tests/
+
+      - name: Run Unit Tests & Coverage
+        run: |
+          pytest tests/ -v --cov=src --cov-report=term-missing --cov-report=xml:coverage.xml
+
+      - name: Smoke Test Application
+        run: |
+          python -m src.app
+
+      - name: Upload Coverage Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  sast-scan:
+    name: SAST Security Scan & Quality Gate
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install SAST Tools (Bandit & Semgrep)
+        run: |
+          python -m pip install --upgrade pip
+          pip install "bandit[toml]==1.7.10" semgrep
+
+      - name: Run Bandit SAST Scanner
+        run: |
+          echo "=== Menjalankan Bandit SAST pada direktori src/ ==="
+          bandit -r src/ -f txt || true
+          bandit -r src/ -f json -o bandit-report.json || true
+
+      - name: Run Semgrep SAST Scanner
+        run: |
+          echo "=== Menjalankan Semgrep SAST (Python Security Rules) ==="
+          semgrep scan --config=p/python src/ || true
+          semgrep scan --config=p/python --json -o semgrep-report.json src/ || true
+
+      - name: Upload SAST Scan Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-security-reports
+          path: |
+            bandit-report.json
+            semgrep-report.json
+
+      - name: Quality Gate Check (Pipeline Blocker)
+        run: |
+          python - << 'EOF'
+          import json
+          import sys
+
+          with open("bandit-report.json", "r", encoding="utf-8") as f:
+              bandit_data = json.load(f)
+
+          with open("semgrep-report.json", "r", encoding="utf-8") as f:
+              semgrep_data = json.load(f)
+
+          bandit_results = bandit_data.get("results", [])
+          semgrep_results = semgrep_data.get("results", [])
+
+          print("=" * 72)
+          print("             DEVSECOPS SAST QUALITY GATE EVALUATION")
+          print("=" * 72)
+          print(f"Total Temuan Bandit SAST  : {len(bandit_results)}")
+          print(f"Total Temuan Semgrep SAST : {len(semgrep_results)}")
+          print("-" * 72)
+
+          for idx, issue in enumerate(bandit_results, 1):
+              cwe = issue.get("issue_cwe", {}).get("id", "N/A")
+              print(
+                  f"[Bandit #{idx}] {issue['test_id']} ({issue['test_name']}) | "
+                  f"Severity: {issue['issue_severity']} | CWE-{cwe} | "
+                  f"{issue['filename']}:{issue['line_number']} -> {issue['issue_text']}"
+              )
+
+          for idx, item in enumerate(semgrep_results, 1):
+              sev = item.get("extra", {}).get("severity", "WARNING")
+              msg = item.get("extra", {}).get("message", "")
+              print(
+                  f"[Semgrep #{idx}] {item.get('check_id')} | "
+                  f"Severity: {sev} | "
+                  f"{item.get('path')}:{item.get('start', {}).get('line')} -> {msg}"
+              )
+
+          print("=" * 72)
+
+          if len(bandit_results) > 0 or len(semgrep_results) > 0:
+              print("❌ QUALITY GATE STATUS: FAILED")
+              print(
+                  f"Pipeline diblokir! Ditemukan {len(bandit_results)} isu Bandit "
+                  f"dan {len(semgrep_results)} isu Semgrep yang melanggar kebijakan keamanan."
+              )
+              sys.exit(1)
+
+          print("✅ QUALITY GATE STATUS: PASSED")
+          print("Seluruh pemeriksaan keamanan SAST lulus tanpa celah keamanan (0 vulnerabilities).")
+          sys.exit(0)
+          EOF
