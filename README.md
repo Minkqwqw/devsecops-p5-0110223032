@@ -106,13 +106,13 @@ Workflow ini terpicu secara otomatis pada dua kejadian utama:
 
 ```mermaid
 flowchart LR
-    A["Trigger: Push / PR ke main"] --> B["Job 1: build (ubuntu-latest)"]
-    B -->|Checkout, Install Deps, Run Pytest & Coverage| C{"Unit Test Lulus?"}
-    C -->|Ya (needs: build)| D["Job 2: sast-scan (ubuntu-latest)"]
-    C -->|Tidak| E["Pipeline FAILED"]
-    D -->|Run Bandit SAST & Semgrep SAST| F{"Quality Gate Check"}
-    F -->|0 Vulnerability & Coverage >= 80%| G["Pipeline PASSED"]
-    F -->|Ada Vulnerability Medium/High| E
+    A["Trigger: Push / PR ke main"] --> B["Job 1: build - ubuntu-latest"]
+    B -->|"Checkout, Install Deps, Run Pytest"| C{"Unit Test Lulus?"}
+    C -->|"Ya - needs: build"| D["Job 2: sast-scan - ubuntu-latest"]
+    C -->|"Tidak"| E["Pipeline FAILED"]
+    D -->|"Run Bandit SAST & Semgrep SAST"| F{"Quality Gate Check"}
+    F -->|"0 Vulnerability & Coverage >= 80%"| G["Pipeline PASSED"]
+    F -->|"Ada Vulnerability Medium/High"| E
 ```
 
 1. **Job 1: `build` (Compile, Install Dependencies & Unit Test)**
